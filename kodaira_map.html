@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小平市白地図</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "BIZ UDPGothic", "Meiryo", sans-serif;
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            font-size: 12px;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            font-size: 11px;
+        }
+        
+        .legend-item {
+            margin: 3px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 3px;
+            margin-right: 5px;
+            border: 1px solid #ccc;
+        }
+        
+        .legend-point {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 7px;
+        }
+        
+        /* Custom popup styles */
+        .leaflet-popup-content {
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        /* Custom marker styles */
+        .custom-marker {
+            font-size: 10px;
+            font-weight: bold;
+            text-align: center;
+            white-space: nowrap;
+        }
+        
+        .station-marker {
+            background: #ff4444;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .facility-marker {
+            background: #4444ff;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="control-panel">
+        <h4 style="margin: 0 0 10px 0;">表示切替</h4>
+        <label><input type="checkbox" id="toggle-boundaries" checked> 境界線</label><br>
+        <label><input type="checkbox" id="toggle-roads" checked> 道路</label><br>
+        <label><input type="checkbox" id="toggle-railways" checked> 鉄道</label><br>
+        <label><input type="checkbox" id="toggle-rivers" checked> 河川</label><br>
+        <label><input type="checkbox" id="toggle-facilities" checked> 公共施設</label>
+    </div>
+    
+    <div class="legend">
+        <h4 style="margin: 0 0 10px 0;">凡例</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff0000; border-color: #ff0000;"></div>
+            <span>市境界</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #0066cc; border-color: #0066cc;"></div>
+            <span>町境界</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #888888; border-color: #888888;"></div>
+            <span>主要道路</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #333333; border-color: #333333;"></div>
+            <span>鉄道</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #0099ff; border-color: #0099ff;"></div>
+            <span>河川・水路</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-point" style="background: #ff4444;"></div>
+            <span>駅</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-point" style="background: #4444ff;"></div>
+            <span>公共施設</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Leafletライブラリの読み込み完了を待つ
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+        });
+        
+        function initializeMap() {
+            // 地図の初期化（小平市役所を中心に）
+            const map = L.map('map').setView([35.7284, 139.4774], 13);
+
+        // ベース地図は使用せず、白地図として表示
+        L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', {
+            attribution: ''
+        }).addTo(map);
+
+        // レイヤーグループの作成
+        const boundariesLayer = L.layerGroup().addTo(map);
+        const roadsLayer = L.layerGroup().addTo(map);
+        const railwaysLayer = L.layerGroup().addTo(map);
+        const riversLayer = L.layerGroup().addTo(map);
+        const facilitiesLayer = L.layerGroup().addTo(map);
+
+        // 小平市の境界（概略）
+        const kodairaBoundary = [
+            [35.7484, 139.4474], [35.7384, 139.4874], [35.7084, 139.4974],
+            [35.6984, 139.4674], [35.7084, 139.4374], [35.7284, 139.4274],
+            [35.7484, 139.4474]
+        ];
+
+        // 市境界の描画
+        L.polygon(kodairaBoundary, {
+            color: '#ff0000',
+            weight: 3,
+            fillOpacity: 0,
+            dashArray: '5, 5'
+        }).bindPopup('小平市境界').addTo(boundariesLayer);
+
+        // 町境界と町名のデータ
+        const districts = [
+            {name: '小川町一丁目', center: [35.7384, 139.4774], boundary: [[35.7434, 139.4724], [35.7434, 139.4824], [35.7334, 139.4824], [35.7334, 139.4724], [35.7434, 139.4724]]},
+            {name: '小川町二丁目', center: [35.7284, 139.4774], boundary: [[35.7334, 139.4724], [35.7334, 139.4824], [35.7234, 139.4824], [35.7234, 139.4724], [35.7334, 139.4724]]},
+            {name: '小川西町一丁目', center: [35.7384, 139.4674], boundary: [[35.7434, 139.4624], [35.7434, 139.4724], [35.7334, 139.4724], [35.7334, 139.4624], [35.7434, 139.4624]]},
+            {name: '小川西町二丁目', center: [35.7284, 139.4674], boundary: [[35.7334, 139.4624], [35.7334, 139.4724], [35.7234, 139.4724], [35.7234, 139.4624], [35.7334, 139.4624]]},
+            {name: '小川西町三丁目', center: [35.7184, 139.4674], boundary: [[35.7234, 139.4624], [35.7234, 139.4724], [35.7134, 139.4724], [35.7134, 139.4624], [35.7234, 139.4624]]},
+            {name: '小川西町四丁目', center: [35.7084, 139.4674], boundary: [[35.7134, 139.4624], [35.7134, 139.4724], [35.7034, 139.4724], [35.7034, 139.4624], [35.7134, 139.4624]]},
+            {name: '小川西町五丁目', center: [35.6984, 139.4674], boundary: [[35.7034, 139.4624], [35.7034, 139.4724], [35.6934, 139.4724], [35.6934, 139.4624], [35.7034, 139.4624]]},
+            {name: '小川東町一丁目', center: [35.7384, 139.4874], boundary: [[35.7434, 139.4824], [35.7434, 139.4924], [35.7334, 139.4924], [35.7334, 139.4824], [35.7434, 139.4824]]},
+            {name: '小川東町二丁目', center: [35.7284, 139.4874], boundary: [[35.7334, 139.4824], [35.7334, 139.4924], [35.7234, 139.4924], [35.7234, 139.4824], [35.7334, 139.4824]]},
+            {name: '小川東町三丁目', center: [35.7184, 139.4874], boundary: [[35.7234, 139.4824], [35.7234, 139.4924], [35.7134, 139.4924], [35.7134, 139.4824], [35.7234, 139.4824]]},
+            {name: '小川東町四丁目', center: [35.7084, 139.4874], boundary: [[35.7134, 139.4824], [35.7134, 139.4924], [35.7034, 139.4924], [35.7034, 139.4824], [35.7134, 139.4824]]},
+            {name: '小川東町五丁目', center: [35.6984, 139.4874], boundary: [[35.7034, 139.4824], [35.7034, 139.4924], [35.6934, 139.4924], [35.6934, 139.4824], [35.7034, 139.4824]]},
+            {name: '花小金井一丁目', center: [35.7484, 139.4574], boundary: [[35.7534, 139.4524], [35.7534, 139.4624], [35.7434, 139.4624], [35.7434, 139.4524], [35.7534, 139.4524]]},
+            {name: '花小金井二丁目', center: [35.7484, 139.4474], boundary: [[35.7534, 139.4424], [35.7534, 139.4524], [35.7434, 139.4524], [35.7434, 139.4424], [35.7534, 139.4424]]},
+            {name: '花小金井三丁目', center: [35.7484, 139.4374], boundary: [[35.7534, 139.4324], [35.7534, 139.4424], [35.7434, 139.4424], [35.7434, 139.4324], [35.7534, 139.4324]]},
+            {name: '花小金井四丁目', center: [35.7384, 139.4374], boundary: [[35.7434, 139.4324], [35.7434, 139.4424], [35.7334, 139.4424], [35.7334, 139.4324], [35.7434, 139.4324]]},
+            {name: '花小金井五丁目', center: [35.7284, 139.4374], boundary: [[35.7334, 139.4324], [35.7334, 139.4424], [35.7234, 139.4424], [35.7234, 139.4324], [35.7334, 139.4324]]},
+            {name: '花小金井六丁目', center: [35.7184, 139.4374], boundary: [[35.7234, 139.4324], [35.7234, 139.4424], [35.7134, 139.4424], [35.7134, 139.4324], [35.7234, 139.4324]]},
+            {name: '花小金井七丁目', center: [35.7084, 139.4374], boundary: [[35.7134, 139.4324], [35.7134, 139.4424], [35.7034, 139.4424], [35.7034, 139.4324], [35.7134, 139.4324]]},
+            {name: '花小金井八丁目', center: [35.6984, 139.4374], boundary: [[35.7034, 139.4324], [35.7034, 139.4424], [35.6934, 139.4424], [35.6934, 139.4324], [35.7034, 139.4324]]},
+            {name: '回田町', center: [35.7284, 139.4574], boundary: [[35.7334, 139.4524], [35.7334, 139.4624], [35.7234, 139.4624], [35.7234, 139.4524], [35.7334, 139.4524]]},
+            {name: '上水本町一丁目', center: [35.7084, 139.4574], boundary: [[35.7134, 139.4524], [35.7134, 139.4624], [35.7034, 139.4624], [35.7034, 139.4524], [35.7134, 139.4524]]},
+            {name: '上水本町二丁目', center: [35.6984, 139.4574], boundary: [[35.7034, 139.4524], [35.7034, 139.4624], [35.6934, 139.4624], [35.6934, 139.4524], [35.7034, 139.4524]]},
+            {name: '上水本町三丁目', center: [35.6884, 139.4574], boundary: [[35.6934, 139.4524], [35.6934, 139.4624], [35.6834, 139.4624], [35.6834, 139.4524], [35.6934, 139.4524]]},
+            {name: '上水本町四丁目', center: [35.6784, 139.4574], boundary: [[35.6834, 139.4524], [35.6834, 139.4624], [35.6734, 139.4624], [35.6734, 139.4524], [35.6834, 139.4524]]},
+            {name: '上水本町五丁目', center: [35.6684, 139.4574], boundary: [[35.6734, 139.4524], [35.6734, 139.4624], [35.6634, 139.4624], [35.6634, 139.4524], [35.6734, 139.4524]]},
+            {name: '上水本町六丁目', center: [35.6584, 139.4574], boundary: [[35.6634, 139.4524], [35.6634, 139.4624], [35.6534, 139.4624], [35.6534, 139.4524], [35.6634, 139.4524]]},
+            {name: '上水南町一丁目', center: [35.7084, 139.4774], boundary: [[35.7134, 139.4724], [35.7134, 139.4824], [35.7034, 139.4824], [35.7034, 139.4724], [35.7134, 139.4724]]},
+            {name: '上水南町二丁目', center: [35.6984, 139.4774], boundary: [[35.7034, 139.4724], [35.7034, 139.4824], [35.6934, 139.4824], [35.6934, 139.4724], [35.7034, 139.4724]]},
+            {name: '上水南町三丁目', center: [35.6884, 139.4774], boundary: [[35.6934, 139.4724], [35.6934, 139.4824], [35.6834, 139.4824], [35.6834, 139.4724], [35.6934, 139.4724]]},
+            {name: '上水南町四丁目', center: [35.6784, 139.4774], boundary: [[35.6834, 139.4724], [35.6834, 139.4824], [35.6734, 139.4824], [35.6734, 139.4724], [35.6834, 139.4724]]},
+            {name: '鈴木町一丁目', center: [35.7384, 139.4574], boundary: [[35.7434, 139.4524], [35.7434, 139.4624], [35.7334, 139.4624], [35.7334, 139.4524], [35.7434, 139.4524]]},
+            {name: '鈴木町二丁目', center: [35.7184, 139.4574], boundary: [[35.7234, 139.4524], [35.7234, 139.4624], [35.7134, 139.4624], [35.7134, 139.4524], [35.7234, 139.4524]]},
+            {name: '津田町一丁目', center: [35.7084, 139.4974], boundary: [[35.7134, 139.4924], [35.7134, 139.5024], [35.7034, 139.5024], [35.7034, 139.4924], [35.7134, 139.4924]]},
+            {name: '津田町二丁目', center: [35.6984, 139.4974], boundary: [[35.7034, 139.4924], [35.7034, 139.5024], [35.6934, 139.5024], [35.6934, 139.4924], [35.7034, 139.4924]]},
+            {name: '津田町三丁目', center: [35.6884, 139.4974], boundary: [[35.6934, 139.4924], [35.6934, 139.5024], [35.6834, 139.5024], [35.6834, 139.4924], [35.6934, 139.4924]]},
+            {name: '仲町', center: [35.7184, 139.4774], boundary: [[35.7234, 139.4724], [35.7234, 139.4824], [35.7134, 139.4824], [35.7134, 139.4724], [35.7234, 139.4724]]},
+            {name: '天神町一丁目', center: [35.7284, 139.4974], boundary: [[35.7334, 139.4924], [35.7334, 139.5024], [35.7234, 139.5024], [35.7234, 139.4924], [35.7334, 139.4924]]},
+            {name: '天神町二丁目', center: [35.7184, 139.4974], boundary: [[35.7234, 139.4924], [35.7234, 139.5024], [35.7134, 139.5024], [35.7134, 139.4924], [35.7234, 139.4924]]},
+            {name: '天神町三丁目', center: [35.7384, 139.5074], boundary: [[35.7434, 139.5024], [35.7434, 139.5124], [35.7334, 139.5124], [35.7334, 139.5024], [35.7434, 139.5024]]},
+            {name: '天神町四丁目', center: [35.7284, 139.5074], boundary: [[35.7334, 139.5024], [35.7334, 139.5124], [35.7234, 139.5124], [35.7234, 139.5024], [35.7334, 139.5024]]},
+            {name: '学園西町一丁目', center: [35.6984, 139.4474], boundary: [[35.7034, 139.4424], [35.7034, 139.4524], [35.6934, 139.4524], [35.6934, 139.4424], [35.7034, 139.4424]]},
+            {name: '学園西町二丁目', center: [35.6884, 139.4474], boundary: [[35.6934, 139.4424], [35.6934, 139.4524], [35.6834, 139.4524], [35.6834, 139.4424], [35.6934, 139.4424]]},
+            {name: '学園西町三丁目', center: [35.6784, 139.4474], boundary: [[35.6834, 139.4424], [35.6834, 139.4524], [35.6734, 139.4524], [35.6734, 139.4424], [35.6834, 139.4424]]},
+            {name: '学園東町一丁目', center: [35.6984, 139.4874], boundary: [[35.7034, 139.4824], [35.7034, 139.4924], [35.6934, 139.4924], [35.6934, 139.4824], [35.7034, 139.4824]]},
+            {name: '学園東町二丁目', center: [35.6884, 139.4874], boundary: [[35.6934, 139.4824], [35.6934, 139.4924], [35.6834, 139.4924], [35.6834, 139.4824], [35.6934, 139.4824]]},
+            {name: '学園東町三丁目', center: [35.6784, 139.4874], boundary: [[35.6834, 139.4824], [35.6834, 139.4924], [35.6734, 139.4924], [35.6734, 139.4824], [35.6834, 139.4824]]},
+            {name: '喜平町一丁目', center: [35.7484, 139.4674], boundary: [[35.7534, 139.4624], [35.7534, 139.4724], [35.7434, 139.4724], [35.7434, 139.4624], [35.7534, 139.4624]]},
+            {name: '喜平町二丁目', center: [35.7484, 139.4774], boundary: [[35.7534, 139.4724], [35.7534, 139.4824], [35.7434, 139.4824], [35.7434, 139.4724], [35.7534, 139.4724]]},
+            {name: '喜平町三丁目', center: [35.7484, 139.4874], boundary: [[35.7534, 139.4824], [35.7534, 139.4924], [35.7434, 139.4924], [35.7434, 139.4824], [35.7534, 139.4824]]},
+            {name: '大沼町一丁目', center: [35.7584, 139.4474], boundary: [[35.7634, 139.4424], [35.7634, 139.4524], [35.7534, 139.4524], [35.7534, 139.4424], [35.7634, 139.4424]]},
+            {name: '大沼町二丁目', center: [35.7584, 139.4574], boundary: [[35.7634, 139.4524], [35.7634, 139.4624], [35.7534, 139.4624], [35.7534, 139.4524], [35.7634, 139.4524]]},
+            {name: '大沼町三丁目', center: [35.7584, 139.4674], boundary: [[35.7634, 139.4624], [35.7634, 139.4724], [35.7534, 139.4724], [35.7534, 139.4624], [35.7634, 139.4624]]},
+            {name: '大沼町四丁目', center: [35.7584, 139.4774], boundary: [[35.7634, 139.4724], [35.7634, 139.4824], [35.7534, 139.4824], [35.7534, 139.4724], [35.7634, 139.4724]]},
+            {name: '大沼町五丁目', center: [35.7584, 139.4874], boundary: [[35.7634, 139.4824], [35.7634, 139.4924], [35.7534, 139.4924], [35.7534, 139.4824], [35.7634, 139.4824]]},
+            {name: '大沼町六丁目', center: [35.7584, 139.4974], boundary: [[35.7634, 139.4924], [35.7634, 139.5024], [35.7534, 139.5024], [35.7534, 139.4924], [35.7634, 139.4924]]},
+            {name: '大沼町七丁目', center: [35.7584, 139.5074], boundary: [[35.7634, 139.5024], [35.7634, 139.5124], [35.7534, 139.5124], [35.7534, 139.5024], [35.7634, 139.5024]]},
+            {name: '栄町一丁目', center: [35.7384, 139.4974], boundary: [[35.7434, 139.4924], [35.7434, 139.5024], [35.7334, 139.5024], [35.7334, 139.4924], [35.7434, 139.4924]]},
+            {name: '栄町二丁目', center: [35.7484, 139.5074], boundary: [[35.7534, 139.5024], [35.7534, 139.5124], [35.7434, 139.5124], [35.7434, 139.5024], [35.7534, 139.5024]]},
+            {name: '栄町三丁目', center: [35.7184, 139.5074], boundary: [[35.7234, 139.5024], [35.7234, 139.5124], [35.7134, 139.5124], [35.7134, 139.5024], [35.7234, 139.5024]]}
+        ];
+
+        // 町境界と町名の描画
+        districts.forEach(district => {
+            // 境界線
+            L.polygon(district.boundary, {
+                color: '#0066cc',
+                weight: 1,
+                fillOpacity: 0
+            }).bindPopup(district.name).addTo(boundariesLayer);
+            
+            // 町名ラベル
+            L.marker(district.center, {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background:rgba(255,255,255,0.8); padding:1px 3px; border-radius:2px; font-size:9px; border:1px solid #ccc;">${district.name}</div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                })
+            }).addTo(boundariesLayer);
+        });
+
+        // 主要道路のデータ
+        const majorRoads = [
+            {name: '青梅街道', path: [[35.7484, 139.4274], [35.7484, 139.5074]], color: '#444444', weight: 4},
+            {name: '小金井街道', path: [[35.7184, 139.4274], [35.7184, 139.5074]], color: '#444444', weight: 4},
+            {name: 'さくら通り', path: [[35.7084, 139.4274], [35.7084, 139.5074]], color: '#666666', weight: 3},
+            {name: '新小金井街道', path: [[35.6984, 139.4274], [35.6984, 139.5074]], color: '#666666', weight: 3},
+            {name: '武蔵野美術大学通り', path: [[35.6884, 139.4274], [35.6884, 139.5074]], color: '#666666', weight: 3},
+            {name: '東大通り', path: [[35.7784, 139.4674], [35.6684, 139.4674]], color: '#666666', weight: 3},
+            {name: '府中街道', path: [[35.7784, 139.4774], [35.6684, 139.4774]], color: '#666666', weight: 3},
+            {name: '学園東通り', path: [[35.7784, 139.4874], [35.6684, 139.4874]], color: '#666666', weight: 3},
+            {name: '小平3・4・19号線', path: [[35.7784, 139.4574], [35.6684, 139.4574]], color: '#888888', weight: 2},
+            {name: '小平3・4・11号線', path: [[35.7784, 139.4474], [35.6684, 139.4474]], color: '#888888', weight: 2},
+            {name: '小平3・4・12号線', path: [[35.7784, 139.4374], [35.6684, 139.4374]], color: '#888888', weight: 2}
+        ];
+
+        // 道路の描画
+        majorRoads.forEach(road => {
+            const roadLine = L.polyline(road.path, {
+                color: road.color,
+                weight: road.weight,
+                opacity: 0.8
+            }).bindPopup(road.name).addTo(roadsLayer);
+            
+            // 道路名ラベル（中点に配置）
+            const midPoint = road.path[Math.floor(road.path.length / 2)];
+            L.marker(midPoint, {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background:rgba(255,255,255,0.9); padding:1px 3px; border-radius:2px; font-size:8px; border:1px solid #666;">${road.name}</div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                })
+            }).addTo(roadsLayer);
+        });
+
+        // 鉄道と駅のデータ
+        const railways = [
+            {
+                name: 'JR武蔵野線',
+                path: [[35.7084, 139.4274], [35.7084, 139.5074]],
+                stations: [
+                    {name: '新小平駅', pos: [35.7084, 139.4574]},
+                    {name: '小平駅', pos: [35.7084, 139.4774]}
+                ]
+            },
+            {
+                name: '西武新宿線',
+                path: [[35.7784, 139.4574], [35.6684, 139.4574]],
+                stations: [
+                    {name: '花小金井駅', pos: [35.7484, 139.4574]},
+                    {name: '小平駅', pos: [35.7084, 139.4574]}
+                ]
+            },
+            {
+                name: '西武拝島線',
+                path: [[35.7084, 139.4274], [35.7084, 139.4774]],
+                stations: [
+                    {name: '小川駅', pos: [35.7384, 139.4674]},
+                    {name: '東大前駅', pos: [35.7184, 139.4674]}
+                ]
+            },
+            {
+                name: '西武国分寺線',
+                path: [[35.6984, 139.4274], [35.6984, 139.5074]],
+                stations: [
+                    {name: '鷹の台駅', pos: [35.6984, 139.4574]},
+                    {name: '小川駅', pos: [35.6984, 139.4774]}
+                ]
+            }
+        ];
+
+        // 鉄道線の描画
+        railways.forEach(railway => {
+            // 線路
+            L.polyline(railway.path, {
+                color: '#333333',
+                weight: 3,
+                opacity: 0.9
+            }).bindPopup(railway.name).addTo(railwaysLayer);
+            
+            // 駅
+            railway.stations.forEach(station => {
+                L.circleMarker(station.pos, {
+                    radius: 6,
+                    fillColor: '#ff4444',
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).bindPopup(`<strong>${station.name}</strong><br>${railway.name}`).addTo(railwaysLayer);
+                
+                // 駅名ラベル
+                L.marker(station.pos, {
+                    icon: L.divIcon({
+                        className: 'custom-marker station-marker',
+                        html: station.name,
+                        iconSize: [0, 0],
+                        iconAnchor: [0, -20]
+                    })
+                }).addTo(railwaysLayer);
+            });
+        });
+
+        // 河川・水路のデータ
+        const rivers = [
+            {
+                name: '玉川上水',
+                path: [[35.7784, 139.4474], [35.7684, 139.4574], [35.7584, 139.4674], [35.7484, 139.4774], [35.7384, 139.4874], [35.7284, 139.4974], [35.7184, 139.5074], [35.7084, 139.5174]]
+            },
+            {
+                name: '野火止用水',
+                path: [[35.7284, 139.4274], [35.7284, 139.4374], [35.7284, 139.4474], [35.7284, 139.4574], [35.7284, 139.4674], [35.7284, 139.4774], [35.7284, 139.4874], [35.7284, 139.4974]]
+            },
+            {
+                name: '鈴木用水',
+                path: [[35.7384, 139.4574], [35.7384, 139.4674], [35.7384, 139.4774], [35.7384, 139.4874]]
+            },
+            {
+                name: '小平用水',
+                path: [[35.7184, 139.4574], [35.7184, 139.4674], [35.7184, 139.4774], [35.7184, 139.4874]]
+            },
+            {
+                name: '砂川用水',
+                path: [[35.6984, 139.4474], [35.6984, 139.4574], [35.6984, 139.4674], [35.6984, 139.4774]]
+            }
+        ];
+
+        // 河川・水路の描画
+        rivers.forEach(river => {
+            L.polyline(river.path, {
+                color: '#0099ff',
+                weight: 3,
+                opacity: 0.7
+            }).bindPopup(river.name).addTo(riversLayer);
+            
+            // 河川名ラベル
+            const midPoint = river.path[Math.floor(river.path.length / 2)];
+            L.marker(midPoint, {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background:rgba(255,255,255,0.9); padding:1px 3px; border-radius:2px; font-size:8px; color:#0099ff; border:1px solid #0099ff;">${river.name}</div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                })
+            }).addTo(riversLayer);
+        });
+
+        // 公共施設のデータ
+        const facilities = [
+            // 市役所・区役所
+            {name: '小平市役所', pos: [35.7284, 139.4774], type: '市役所', icon: '🏛️'},
+            
+            // 警察署・交番
+            {name: '小平警察署', pos: [35.7184, 139.4874], type: '警察署', icon: '🚔'},
+            {name: '花小金井交番', pos: [35.7484, 139.4574], type: '交番', icon: '🚔'},
+            {name: '小川交番', pos: [35.7384, 139.4674], type: '交番', icon: '🚔'},
+            {name: '鷹の台交番', pos: [35.6984, 139.4574], type: '交番', icon: '🚔'},
+            {name: '学園東町交番', pos: [35.6884, 139.4874], type: '交番', icon: '🚔'},
+            
+            // 消防署
+            {name: '小平消防署', pos: [35.7284, 139.4674], type: '消防署', icon: '🚒'},
+            {name: '小平消防署花小金井出張所', pos: [35.7484, 139.4474], type: '消防署', icon: '🚒'},
+            {name: '小平消防署小川出張所', pos: [35.7384, 139.4574], type: '消防署', icon: '🚒'},
+            
+            // 公民館
+            {name: '小平市中央公民館', pos: [35.7284, 139.4874], type: '公民館', icon: '🏢'},
+            {name: '小平市花小金井南公民館', pos: [35.7384, 139.4474], type: '公民館', icon: '🏢'},
+            {name: '小平市小川公民館', pos: [35.7384, 139.4774], type: '公民館', icon: '🏢'},
+            {name: '小平市鈴木公民館', pos: [35.7184, 139.4574], type: '公民館', icon: '🏢'},
+            {name: '小平市上水南公民館', pos: [35.6984, 139.4774], type: '公民館', icon: '🏢'},
+            {name: '小平市津田公民館', pos: [35.6984, 139.4974], type: '公民館', icon: '🏢'},
+            {name: '小平市大沼公民館', pos: [35.7584, 139.4774], type: '公民館', icon: '🏢'},
+            
+            // 郵便局
+            {name: '小平郵便局', pos: [35.7284, 139.4774], type: '郵便局', icon: '📮'},
+            {name: '花小金井郵便局', pos: [35.7484, 139.4574], type: '郵便局', icon: '📮'},
+            {name: '小川郵便局', pos: [35.7384, 139.4674], type: '郵便局', icon: '📮'},
+            {name: '鷹の台郵便局', pos: [35.6984, 139.4574], type: '郵便局', icon: '📮'},
+            {name: '学園東町郵便局', pos: [35.6884, 139.4874], type: '郵便局', icon: '📮'},
+            {name: '上水本町郵便局', pos: [35.6984, 139.4574], type: '郵便局', icon: '📮'},
+            {name: '天神町郵便局', pos: [35.7284, 139.4974], type: '郵便局', icon: '📮'},
+            {name: '回田郵便局', pos: [35.7284, 139.4574], type: '郵便局', icon: '📮'},
+            
+            // 地域センター
+            {name: '小平市東部地域センター', pos: [35.7384, 139.4874], type: '地域センター', icon: '🏛️'},
+            {name: '小平市西部地域センター', pos: [35.7084, 139.4474], type: '地域センター', icon: '🏛️'},
+            {name: '小平市南部地域センター', pos: [35.6884, 139.4674], type: '地域センター', icon: '🏛️'},
+            {name: '小平市北部地域センター', pos: [35.7484, 139.4774], type: '地域センター', icon: '🏛️'},
+            {name: '小平市中部地域センター', pos: [35.7184, 139.4774], type: '地域センター', icon: '🏛️'}
+        ];
+
+        // 公共施設の描画
+        facilities.forEach(facility => {
+            let markerColor = '#4444ff';
+            if (facility.type === '市役所') markerColor = '#ff0000';
+            else if (facility.type === '警察署' || facility.type === '交番') markerColor = '#0066cc';
+            else if (facility.type === '消防署') markerColor = '#ff6600';
+            else if (facility.type === '郵便局') markerColor = '#cc0000';
+            
+            L.circleMarker(facility.pos, {
+                radius: 8,
+                fillColor: markerColor,
+                color: '#ffffff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).bindPopup(`<strong>${facility.name}</strong><br>種別: ${facility.type}`).addTo(facilitiesLayer);
+            
+            // 施設名ラベル
+            L.marker(facility.pos, {
+                icon: L.divIcon({
+                    className: 'custom-marker facility-marker',
+                    html: `<div style="background:${markerColor}; color:white; padding:1px 3px; border-radius:2px; font-size:8px;">${facility.name}</div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, -25]
+                })
+            }).addTo(facilitiesLayer);
+        });
+
+        // 表示切替機能
+        document.getElementById('toggle-boundaries').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                map.addLayer(boundariesLayer);
+            } else {
+                map.removeLayer(boundariesLayer);
+            }
+        });
+
+        document.getElementById('toggle-roads').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                map.addLayer(roadsLayer);
+            } else {
+                map.removeLayer(roadsLayer);
+            }
+        });
+
+        document.getElementById('toggle-railways').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                map.addLayer(railwaysLayer);
+            } else {
+                map.removeLayer(railwaysLayer);
+            }
+        });
+
+        document.getElementById('toggle-rivers').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                map.addLayer(riversLayer);
+            } else {
+                map.removeLayer(riversLayer);
+            }
+        });
+
+        document.getElementById('toggle-facilities').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                map.addLayer(facilitiesLayer);
+            } else {
+                map.removeLayer(facilitiesLayer);
+            }
+        });
+
+        // 地図の境界を小平市に合わせて調整
+        const bounds = L.latLngBounds([
+            [35.6584, 139.4274], // 南西
+            [35.7784, 139.5174]  // 北東
+        ]);
+        map.fitBounds(bounds);
+        
+        // ズームレベルの調整
+        map.setMaxBounds(bounds);
+        map.setMinZoom(11);
+        map.setMaxZoom(18);
+        }
+    </script>
+</body>
+</html>
